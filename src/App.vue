@@ -133,7 +133,7 @@ const stageBackgroundConfig = computed(() => ({
   listening: false,
   fillLinearGradientStartPoint: { x: 0, y: 0 },
   fillLinearGradientEndPoint: { x: stageSize.width, y: stageSize.height },
-  fillLinearGradientColorStops: [0, '#d9f2ee', 1, '#f8fafc'],
+  fillLinearGradientColorStops: [0, '#020617', 0.5, '#0b1221', 1, '#111827'],
 }))
 
 const transformerConfig = {
@@ -766,6 +766,16 @@ function flipSelectedImage(axis) {
     block.scaleY *= -1
   }
 
+  pushHistory()
+  nextTick(updateTransformer)
+}
+
+function rotateSelectedBy(delta) {
+  if (!selectedBlock.value) {
+    return
+  }
+
+  selectedBlock.value.rotation += delta
   pushHistory()
   nextTick(updateTransformer)
 }
@@ -1607,55 +1617,71 @@ onBeforeUnmount(() => {
       </aside>
 
       <div ref="canvasWrapRef" class="canvas-wrap">
-        <v-stage
-          ref="stageRef"
-          :config="stageConfig"
-          @mousedown="onStageMouseDown"
-          @mousemove="onStageMouseMove"
-          @mouseup="onStageMouseUp"
-          @touchstart="onStageMouseDown"
-          @touchmove="onStageMouseMove"
-          @touchend="onStageMouseUp"
-          @wheel="onStageWheel"
-          @dragend="onStageDragEnd"
-        >
-          <v-layer>
-            <v-rect :config="stageBackgroundConfig" />
+        <div class="preview-card">
+          <div class="preview-head">
+            <h2>Sample 3D Model</h2>
+          </div>
 
-            <v-image
-              v-for="block in imageBlocks"
-              :key="block.id"
-              :config="getImageNodeConfig(block)"
-              @click="selectBlock(block.id)"
-              @tap="selectBlock(block.id)"
-              @dragend="onBlockDragEnd(block, $event)"
-              @transformend="onBlockTransformEnd(block, $event)"
-            />
+          <div class="stage-shell">
+            <v-stage
+              ref="stageRef"
+              :config="stageConfig"
+              @mousedown="onStageMouseDown"
+              @mousemove="onStageMouseMove"
+              @mouseup="onStageMouseUp"
+              @touchstart="onStageMouseDown"
+              @touchmove="onStageMouseMove"
+              @touchend="onStageMouseUp"
+              @wheel="onStageWheel"
+              @dragend="onStageDragEnd"
+            >
+              <v-layer>
+                <v-rect :config="stageBackgroundConfig" />
 
-            <v-text
-              v-for="block in textBlocks"
-              :key="block.id"
-              :config="getTextNodeConfig(block)"
-              @click="selectBlock(block.id)"
-              @tap="selectBlock(block.id)"
-              @dragend="onBlockDragEnd(block, $event)"
-              @transformend="onBlockTransformEnd(block, $event)"
-            />
+                <v-image
+                  v-for="block in imageBlocks"
+                  :key="block.id"
+                  :config="getImageNodeConfig(block)"
+                  @click="selectBlock(block.id)"
+                  @tap="selectBlock(block.id)"
+                  @dragend="onBlockDragEnd(block, $event)"
+                  @transformend="onBlockTransformEnd(block, $event)"
+                />
 
-            <v-transformer ref="transformerRef" :config="transformerConfig" />
-          </v-layer>
+                <v-text
+                  v-for="block in textBlocks"
+                  :key="block.id"
+                  :config="getTextNodeConfig(block)"
+                  @click="selectBlock(block.id)"
+                  @tap="selectBlock(block.id)"
+                  @dragend="onBlockDragEnd(block, $event)"
+                  @transformend="onBlockTransformEnd(block, $event)"
+                />
 
-          <v-layer :config="{ listening: false }">
-            <v-line
-              v-for="line in lines"
-              :key="line.id"
-              :config="getLineNodeConfig(line)"
-            />
-          </v-layer>
-        </v-stage>
+                <v-transformer ref="transformerRef" :config="transformerConfig" />
+              </v-layer>
+
+              <v-layer :config="{ listening: false }">
+                <v-line
+                  v-for="line in lines"
+                  :key="line.id"
+                  :config="getLineNodeConfig(line)"
+                />
+              </v-layer>
+            </v-stage>
+          </div>
+
+          <div class="quick-dock">
+            <button class="quick-btn" :class="{ active: panMode }" @click="togglePanMode">Move</button>
+            <button class="quick-btn" :disabled="!selectedBlock" @click="rotateSelectedBy(15)">Rotate</button>
+            <button class="quick-btn" :disabled="!selectedBlock" @click="focusSelectedBlock">Center</button>
+            <button class="quick-btn" :disabled="!canUndo" @click="undo">Undo</button>
+            <button class="quick-btn" @click="resetStageView">Reset</button>
+          </div>
+        </div>
 
         <p class="canvas-hint">
-          Wheel = zoom, Pan mode = move viewport, Reset view = return to origin. Select mode edits blocks.
+          Wheel = zoom, Move = pan viewport, Reset = return view. Undo history is 5 steps by current spec.
         </p>
       </div>
     </div>
@@ -1892,11 +1918,11 @@ onBeforeUnmount(() => {
 
 .canvas-wrap {
   position: relative;
-  background: linear-gradient(160deg, rgba(255, 255, 255, 0.9), rgba(226, 232, 240, 0.68));
-  border: 1px solid var(--c-line);
+  background: linear-gradient(180deg, #020617, #0b1221);
+  border: 2px solid rgba(45, 212, 191, 0.85);
   border-radius: var(--radius-l);
-  padding: 10px;
-  box-shadow: var(--shadow-1);
+  padding: 12px;
+  box-shadow: 0 12px 34px rgba(2, 6, 23, 0.4);
   overflow: hidden;
 }
 
@@ -1906,12 +1932,61 @@ onBeforeUnmount(() => {
   inset: 0;
   pointer-events: none;
   border-radius: var(--radius-l);
-  border: 1px solid rgba(15, 118, 110, 0.2);
+  border: 1px solid rgba(45, 212, 191, 0.28);
+}
+
+.preview-card {
+  display: grid;
+  gap: 10px;
+  border-radius: 14px;
+  background: linear-gradient(160deg, rgba(2, 6, 23, 0.92), rgba(15, 23, 42, 0.92));
+  border: 1px solid rgba(45, 212, 191, 0.5);
+  padding: 10px;
+}
+
+.preview-head {
+  display: flex;
+  align-items: center;
+}
+
+.preview-head h2 {
+  margin: 0;
+  color: #5eead4;
+  font-size: 1.7rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.stage-shell {
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(45, 212, 191, 0.35);
+}
+
+.quick-dock {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.quick-btn {
+  min-width: 84px;
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: linear-gradient(170deg, #0f766e, #0e7490);
+  color: #ecfeff;
+  border-color: rgba(45, 212, 191, 0.5);
+}
+
+.quick-btn:hover:enabled {
+  border-color: rgba(94, 234, 212, 0.8);
+  box-shadow: 0 4px 12px rgba(20, 184, 166, 0.3);
 }
 
 .canvas-hint {
-  margin: 8px 2px 0;
-  color: #1f2937;
+  margin: 10px 2px 2px;
+  color: #99f6e4;
   font-size: 0.8rem;
 }
 

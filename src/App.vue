@@ -8,6 +8,7 @@ const IMAGE_FILTERS = [Konva.Filters.Brighten, Konva.Filters.Contrast, Konva.Fil
 const ZOOM_MIN = 0.35
 const ZOOM_MAX = 3.5
 const ZOOM_STEP = 1.08
+const CANVAS_INSET = 20
 
 const stageRef = ref(null)
 const transformerRef = ref(null)
@@ -192,9 +193,10 @@ function updateStageSize() {
     return
   }
 
-  const width = Math.max(340, Math.floor(canvasWrapRef.value.clientWidth))
-  const maxHeight = Math.floor(window.innerHeight * 0.72)
-  const height = Math.max(320, maxHeight)
+  const width = Math.max(340, Math.floor(canvasWrapRef.value.clientWidth - CANVAS_INSET))
+  const maxHeight = Math.max(320, Math.floor(window.innerHeight * 0.72))
+  const preferredHeight = Math.round(width * 0.62)
+  const height = clamp(preferredHeight, 320, maxHeight)
 
   stageSize.width = width
   stageSize.height = height
@@ -261,6 +263,11 @@ function onStageWheel(event) {
 }
 
 function onStageDragEnd(event) {
+  const stage = getStageNode()
+  if (!stage || event.target !== stage) {
+    return
+  }
+
   stageViewport.x = event.target.x()
   stageViewport.y = event.target.y()
 }
@@ -1363,6 +1370,7 @@ watch(
 
 onMounted(() => {
   updateStageSize()
+  resetStageView()
   syncExportSizeWithStage()
   window.addEventListener('resize', updateStageSize)
   pushHistory()

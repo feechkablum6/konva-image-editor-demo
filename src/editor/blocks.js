@@ -216,20 +216,16 @@ export function getImageLineClipConfig(block) {
 }
 
 export function getImageFrameConfig(block, { isSelected, canInteractByFrame }) {
-  let stroke = '#67e8f9'
-  let strokeWidth = 2.5
-  let fill = 'rgba(103, 232, 249, 0.08)'
-  let dash = [8, 5]
-  let shadowColor = 'rgba(34, 211, 238, 0.35)'
-  let shadowBlur = 6
+  let stroke = 'transparent'
+  let strokeWidth = 0
+  let fill = 'rgba(15, 23, 42, 0.001)'
+  let dash = []
 
   if (isSelected) {
     stroke = '#22c55e'
-    strokeWidth = 4
-    fill = 'rgba(34, 197, 94, 0.14)'
+    strokeWidth = 2
+    fill = 'rgba(34, 197, 94, 0.08)'
     dash = []
-    shadowColor = 'rgba(34, 197, 94, 0.45)'
-    shadowBlur = 12
   }
 
   return {
@@ -241,11 +237,10 @@ export function getImageFrameConfig(block, { isSelected, canInteractByFrame }) {
     stroke,
     strokeWidth,
     dash,
-    shadowColor,
-    shadowBlur,
-    shadowOpacity: 0.9,
     hitStrokeWidth: 14,
     strokeScaleEnabled: false,
+    perfectDrawEnabled: false,
+    shadowForStrokeEnabled: false,
     listening: canInteractByFrame,
   }
 }
@@ -260,6 +255,7 @@ export function getImageNodeConfig(block, { isDraggable, imageFilters, filtersEn
     height: block.height,
     draggable: isDraggable,
     listening: true,
+    perfectDrawEnabled: false,
     filters: filtersEnabled ? imageFilters : [],
     brightness: block.brightness,
     contrast: block.contrast,
@@ -285,6 +281,7 @@ export function getTextNodeConfig(block, { isDraggable }) {
     fill: block.fill,
     align: 'left',
     verticalAlign: 'top',
+    perfectDrawEnabled: false,
   }
 }
 
@@ -298,6 +295,7 @@ export function getLineNodeConfig(line) {
     lineCap: 'round',
     lineJoin: 'round',
     listening: false,
+    perfectDrawEnabled: false,
     globalCompositeOperation: line.tool === 'erase' ? 'destination-out' : 'source-over',
   }
 }

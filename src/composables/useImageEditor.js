@@ -8,6 +8,7 @@ import {
   createImageBlockState,
   createTextBlockState,
   flipImageBlockState,
+  getBlockBounds,
   getBlocksBounds,
   getImageBlockGroupConfig as buildImageBlockGroupConfig,
   getImageFrameConfig as buildImageFrameConfig,
@@ -32,6 +33,8 @@ export function useImageEditor() {
   const CANVAS_INSET = 20
   const BLOCK_GROUP_NAME = 'image-block-group'
   const CACHE_MAX_EDGE = 1200
+  const VIEWPORT_CULL_THRESHOLD = 18
+  const VIEWPORT_RENDER_PADDING = 220
 
   const stageRef = ref(null)
   const transformerRef = ref(null)
@@ -103,6 +106,7 @@ export function useImageEditor() {
   const notice = ref('')
   const imageCache = new Map()
   const recacheFrameById = new Map()
+  const initialKonvaPixelRatio = Konva.pixelRatio
 
   let idCounter = 0
   let noticeTimer = null
@@ -142,6 +146,55 @@ export function useImageEditor() {
   })
   const zoomPercent = computed(() => `${Math.round(stageViewport.scale * 100)}%`)
 
+  function getViewportBounds(padding = VIEWPORT_RENDER_PADDING) {
+    const scale = Math.max(0.000001, stageViewport.scale)
+    const left = (-stageViewport.x - padding) / scale
+    const top = (-stageViewport.y - padding) / scale
+    const right = left + (stageSize.width + padding * 2) / scale
+    const bottom = top + (stageSize.height + padding * 2) / scale
+
+    return {
+      left,
+      top,
+      right,
+      bottom,
+    }
+  }
+
+  function isBlockVisibleInViewport(block, viewportBounds) {
+    if (!block || !viewportBounds) {
+      return false
+    }
+
+    const bounds = getBlockBounds(block)
+    return (
+      bounds.maxX >= viewportBounds.left &&
+      bounds.minX <= viewportBounds.right &&
+      bounds.maxY >= viewportBounds.top &&
+      bounds.minY <= viewportBounds.bottom
+    )
+  }
+
+  function buildRenderableBlockList(sourceList) {
+    if (!Array.isArray(sourceList) || sourceList.length <= VIEWPORT_CULL_THRESHOLD) {
+      return sourceList
+    }
+
+    const viewportBounds = getViewportBounds()
+
+    return sourceList.filter((block) => {
+      if (!block) {
+        return false
+      }
+
+      if (block.id === selectedId.value || block.id === drawingBlockId.value) {
+        return true
+      }
+
+      return isBlockVisibleInViewport(block, viewportBounds)
+    })
+  }
+
   const canUndo = computed(() => {
     if (!selectedImage.value) {
       return false
@@ -159,6 +212,9 @@ export function useImageEditor() {
     const historyIndex = Number.isFinite(selectedImage.value.historyIndex) ? selectedImage.value.historyIndex : -1
     return historyIndex >= 0 && historyIndex < blockHistory.length - 1
   })
+
+  const renderImageBlocks = computed(() => buildRenderableBlockList(imageBlocks.value))
+  const renderTextBlocks = computed(() => buildRenderableBlockList(textBlocks.value))
 
   const stageConfig = computed(() => ({
     width: stageSize.width,
@@ -217,6 +273,12 @@ export function useImageEditor() {
     }, 4200)
   }
 
+  function applyKonvaPerformanceTuning() {
+    if (window.devicePixelRatio > 1) {
+      Konva.pixelRatio = 1
+    }
+  }
+
   function getStageNode() {
     return stageRef.value?.getNode?.() || null
   }
@@ -226,10 +288,12 @@ export function useImageEditor() {
       return
     }
 
-    const width = Math.max(340, Math.floor(canvasWrapRef.value.clientWidth - CANVAS_INSET))
-    const maxHeight = Math.max(320, Math.floor(window.innerHeight * 0.72))
-    const preferredHeight = Math.round(width * 0.62)
-    const height = clamp(preferredHeight, 320, maxHeight)
+    const isCompactViewport = window.innerWidth <= 900
+    const minHeight = isCompactViewport ? 220 : 280
+    const width = Math.max(300, Math.floor(canvasWrapRef.value.clientWidth - CANVAS_INSET))
+    const maxHeight = Math.max(minHeight, Math.floor(window.innerHeight - (isCompactViewport ? 260 : 360)))
+    const preferredHeight = Math.round(width * 0.58)
+    const height = clamp(preferredHeight, minHeight, maxHeight)
 
     stageSize.width = width
     stageSize.height = height
@@ -553,7 +617,9 @@ export function useImageEditor() {
     await nextTick()
     for (const block of blocks.value) {
       if (block.kind === 'image') {
-        recacheImageNode(block.id)
+        if (hasActiveImageFilters(block)) {
+          recacheImageNode(block.id)
+        }
         block.history = []
         block.historyIndex = -1
         block.isRestoringHistory = false
@@ -687,7 +753,7 @@ export function useImageEditor() {
   function getImageBlockGroupConfig(block) {
     return buildImageBlockGroupConfig(block, {
       blockGroupName: BLOCK_GROUP_NAME,
-      isDraggable: tool.value === 'select' && !panMode.value,
+      isDraggable: tool.value === 'select' && !panMode.value && selectedId.value === block.id,
     })
   }
 
@@ -712,7 +778,7 @@ export function useImageEditor() {
 
   function getTextNodeConfig(block) {
     return buildTextNodeConfig(block, {
-      isDraggable: tool.value === 'select' && !panMode.value,
+      isDraggable: tool.value === 'select' && !panMode.value && selectedId.value === block.id,
     })
   }
 
@@ -856,7 +922,7 @@ export function useImageEditor() {
     const node = event.target
     applyBlockTransformState(block, node)
 
-    if (block.kind === 'image') {
+    if (block.kind === 'image' && hasActiveImageFilters(block)) {
       nextTick(() => recacheImageNode(block.id))
     }
 
@@ -946,7 +1012,9 @@ export function useImageEditor() {
     selectedId.value = duplicate.id
     pushHistory(duplicate)
     nextTick(() => {
-      recacheImageNode(duplicate.id)
+      if (hasActiveImageFilters(duplicate)) {
+        recacheImageNode(duplicate.id)
+      }
       updateTransformer()
     })
   }
@@ -1136,7 +1204,9 @@ export function useImageEditor() {
     selectedId.value = block.id
 
     await nextTick()
-    recacheImageNode(block.id)
+    if (hasActiveImageFilters(block)) {
+      recacheImageNode(block.id)
+    }
     syncImageControls()
     pushHistory(block)
     updateTransformer()
@@ -1545,6 +1615,7 @@ export function useImageEditor() {
   )
 
   onMounted(() => {
+    applyKonvaPerformanceTuning()
     updateStageSize()
     resetStageView()
     syncExportSizeWithStage()
@@ -1569,6 +1640,8 @@ export function useImageEditor() {
     if (noticeTimer) {
       window.clearTimeout(noticeTimer)
     }
+
+    Konva.pixelRatio = initialKonvaPixelRatio
   })
 
   return {
@@ -1593,6 +1666,8 @@ export function useImageEditor() {
     selectedText,
     imageBlocks,
     textBlocks,
+    renderImageBlocks,
+    renderTextBlocks,
     totalBlocks,
     selectedKindLabel,
     activeToolLabel,
@@ -1612,6 +1687,7 @@ export function useImageEditor() {
     togglePanMode,
     resetSelectedBlockState,
     focusSelectedBlock,
+    fitViewportToAllBlocks,
     setTool,
     selectBlock,
     undo,

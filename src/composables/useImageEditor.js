@@ -620,6 +620,9 @@ export function useImageEditor() {
         if (hasActiveImageFilters(block)) {
           recacheImageNode(block.id)
         }
+        if (block.lines.some((l) => l.tool === 'erase')) {
+          recacheLinesGroup(block.id)
+        }
         block.history = []
         block.historyIndex = -1
         block.isRestoringHistory = false
@@ -653,6 +656,7 @@ export function useImageEditor() {
 
       await nextTick()
       recacheImageNode(targetBlock.id)
+      recacheLinesGroup(targetBlock.id)
       targetBlock.historyIndex = targetIndex
       updateTransformer()
     } catch (error) {
@@ -750,6 +754,45 @@ export function useImageEditor() {
     }
   }
 
+  function recacheLinesGroup(id) {
+    const stage = getStageNode()
+    if (!stage) return
+
+    const linesGroup = stage.findOne(`#${id}-lines`)
+    if (!linesGroup) return
+
+    const block = getImageBlockById(id)
+    const hasEraseLines = block?.lines.some((l) => l.tool === 'erase')
+
+    try {
+      if (!hasEraseLines) {
+        const isCached = typeof linesGroup.isCached === 'function' ? linesGroup.isCached() : false
+        if (isCached) {
+          linesGroup.clearCache()
+        }
+        linesGroup.getLayer()?.batchDraw()
+        return
+      }
+
+      linesGroup.clearCache()
+      linesGroup.cache()
+      linesGroup.getLayer()?.batchDraw()
+    } catch {
+      linesGroup.getLayer()?.batchDraw()
+    }
+  }
+
+  function scheduleLinesRecache(id) {
+    const key = `lines-${id}`
+    if (!id || recacheFrameById.has(key)) return
+
+    const frameId = window.requestAnimationFrame(() => {
+      recacheFrameById.delete(key)
+      recacheLinesGroup(id)
+    })
+    recacheFrameById.set(key, frameId)
+  }
+
   function getImageBlockGroupConfig(block) {
     return buildImageBlockGroupConfig(block, {
       blockGroupName: BLOCK_GROUP_NAME,
@@ -808,10 +851,12 @@ export function useImageEditor() {
     }
 
     const drawnBlock = getImageBlockById(drawingBlockId.value)
+    const finishedBlockId = drawingBlockId.value
     isDrawing.value = false
     drawingBlockId.value = ''
 
     if (drawnBlock) {
+      nextTick(() => recacheLinesGroup(finishedBlockId))
       pushHistory(drawnBlock)
     }
   }
@@ -858,6 +903,10 @@ export function useImageEditor() {
         size: strokeSize,
         points: [localPointer.x, localPointer.y],
       })
+
+      if (tool.value === 'erase') {
+        scheduleLinesRecache(sourceBlock.id)
+      }
       return
     }
 
@@ -897,6 +946,10 @@ export function useImageEditor() {
       ...lastLine,
       points: updatedPoints,
     })
+
+    if (lastLine.tool === 'erase') {
+      scheduleLinesRecache(drawingBlock.id)
+    }
   }
 
   function onStageMouseUp() {
@@ -1014,6 +1067,9 @@ export function useImageEditor() {
     nextTick(() => {
       if (hasActiveImageFilters(duplicate)) {
         recacheImageNode(duplicate.id)
+      }
+      if (duplicate.lines.some((l) => l.tool === 'erase')) {
+        recacheLinesGroup(duplicate.id)
       }
       updateTransformer()
     })

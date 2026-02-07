@@ -205,6 +205,7 @@ export function getImageBlockGroupConfig(block, { blockGroupName, isDraggable })
 
 export function getImageLineClipConfig(block) {
   return {
+    id: `${block.id}-lines`,
     clip: {
       x: 0,
       y: 0,
